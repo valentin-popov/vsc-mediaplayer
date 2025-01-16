@@ -1,6 +1,6 @@
 {
-  "name": "vsc-mediaplayer",
-  "displayName": "vsc-mediaplayer",
+  "name": "vsc-spotify",
+  "displayName": "vsc-spotify",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -14,14 +14,43 @@
   "contributes": {
     "commands": [
       {
-        "command": "vsc-mediaplayer.enterCredentials",
+        "command": "vsc-spotify.enterCredentials",
         "title": "Enter Client Credentials"
       },
       {
-        "command": "vsc-mediaplayer.searchSong",
-        "title": "Search"
+        "command": "vsc-spotify.playlists.reload",
+        "title": "Reload Playlists",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vsc-spotify.tracks.reload",
+        "title": "Reload Tracks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vsc-spotify.playlists.load",
+        "title": "Load playlists",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vsc-spotify.login",
+        "title": "Spotify: Login"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "vsc-spotify.playlists.load",
+          "group": "navigation",
+          "when": "view == playlists"
+        },
+        {
+          "command": "vsc-spotify.tracks.reload",
+          "group": "navigation",
+          "when": "view == tracks"
+        }
+      ]
+    },
       "viewsContainers": {
         "activitybar": [
           {
@@ -39,7 +68,7 @@
           },
           {
             "id": "tracks",
-            "name": "Liked Tracks"
+            "name": "Tracks"
           }
         ]
       }

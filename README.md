@@ -1,6 +1,6 @@
-# vsc-mediaplayer README
+# vsc-spotify README
 
-This is the README for your extension "vsc-mediaplayer". After writing up a brief description, we recommend including the following sections.
+This is the README for your extension "vsc-spotify". After writing up a brief description, we recommend including the following sections.
 
 ## Features
 
