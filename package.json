@@ -18,13 +18,8 @@
         "title": "Enter Client Credentials"
       },
       {
-        "command": "vsc-spotify.playlists.reload",
-        "title": "Reload Playlists",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "vsc-spotify.tracks.reload",
-        "title": "Reload Tracks",
+        "command": "vsc-spotify.tracks.load",
+        "title": "Load Tracks",
         "icon": "$(refresh)"
       },
       {
@@ -43,11 +38,6 @@
           "command": "vsc-spotify.playlists.load",
           "group": "navigation",
           "when": "view == playlists"
-        },
-        {
-          "command": "vsc-spotify.tracks.reload",
-          "group": "navigation",
-          "when": "view == tracks"
         }
       ]
     },

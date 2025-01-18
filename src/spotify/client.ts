@@ -1,6 +1,16 @@
 import * as querystring from 'querystring';
 import { Buffer } from 'buffer';
-import { Playlist } from './playlist';
+import { Playlist, Track } from './playlist';
+
+type TrackResponse = {
+	items: {
+		track: {
+			id: string,
+			name: string,
+			is_playable: boolean
+		},
+	}[]
+};
 
 export class Client {
 	
@@ -17,12 +27,11 @@ export class Client {
 	};
 
 	public getAuthUri(redirectUri: string): string {
-		const scope = 'user-read-private user-read-email';
 
 		return 'https://accounts.spotify.com/authorize?' + querystring.stringify({
 			response_type: 'code',
 			client_id: this._clientId,
-			scope: scope,
+			scope: this._getAuthScopes(),
 			redirect_uri: redirectUri,
 		});
 	}
@@ -67,8 +76,7 @@ export class Client {
 	public async getPlaylists(): Promise<Playlist[]> {
 
 		this._refreshToken();
-		const playlists: Playlist[] = [];
-
+	
 		const res = await fetch('https://api.spotify.com/v1/me/playlists', {
 			headers: {
 				'Authorization': `Bearer ${this._token?._accessToken}`
@@ -86,10 +94,71 @@ export class Client {
 			}[]
 		};
 	
+		if (result.items.length === 0) {
+			return [];
+		}
+
+		const playlists: Playlist[] = [
+			new Playlist('liked', 'Liked Songs')
+		];
+
 		for (let item of result.items) {
 			playlists.push(new Playlist(item.id, item.name));
 		}
 		return playlists;
+
+	}
+
+	public async getTracks(playlistId: string): Promise<Track[]> {
+		this._refreshToken();
+
+		if (playlistId === 'liked') {
+			return this._getLikedTracks();
+		}
+
+		const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			}
+		});
+
+		if (res.status !== 200) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+
+		const result = await res.json() as TrackResponse;
+		if (result.items.length === 0) {
+			return [];
+		}
+
+		const tracks: Track[] = [];
+		for (let item of result.items) {
+			tracks.push(new Track(item.track.id, item.track.name, item.track.is_playable));
+		}
+		return tracks;
+	}
+
+	private async _getLikedTracks(): Promise<Track[]> {
+		const res = await fetch(`https://api.spotify.com/v1/me/tracks`, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			}
+		});
+
+		if (res.status !== 200) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+		const result = await res.json() as TrackResponse;
+		
+		if (result.items.length === 0) {
+			return [];
+		}
+
+		const tracks: Track[] = [];
+		for (let item of result.items) {
+			tracks.push(new Track(item.track.id, item.track.name, item.track.is_playable));
+		}
+		return tracks;
 
 	}
 
@@ -103,18 +172,18 @@ export class Client {
 			return;
 		}
 
-		const body = new FormData();
-		body.set('client_id', this._clientId);
-		body.set('refresh_token', this._token?._refreshToken);
-		body.set('grant_type', 'refresh_token');
+		const queryParams = querystring.stringify({
+			client_id: this._clientId,
+			refresh_token: this._token._refreshToken,
+			grant_type: 'refresh_token'
+		});
 
-		fetch('https://accounts.spotify.com/api/token', {
+		fetch(`https://accounts.spotify.com/api/token?${queryParams}`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/x-www-form-urlencoded',
 				'Authorization': `Basic ${(Buffer.from(`${this._clientId}:${this._clientSecret}`)).toString('base64')}`
 			}, 
-			body: body
 		}).then(async res => {
 			if (res.status !== 200) {
 				throw new Error();
@@ -136,6 +205,10 @@ export class Client {
 			);
 		});
 		
+	}
+
+	private _getAuthScopes(): string {
+		return 'user-read-private user-library-read';
 	}
 
 }
