@@ -12,11 +12,19 @@ type TrackResponse = {
 	}[]
 };
 
+type Device = {
+	id: string;
+	label: string;
+	type: string;
+	isRestricted: boolean;
+};
+
 export class Client {
 	
 	private _clientId: string;
 	private _clientSecret: string;
 	private _token: Token | null = null;
+	public currentDeviceId: string = '';
 
 	constructor(
 		id: string,
@@ -39,6 +47,7 @@ export class Client {
 	public authorize(
 		code: string,
 		redirectUri: string,
+		callback?: () => void
 	): void {
 
 		fetch('https://accounts.spotify.com/api/token?' + querystring.stringify({
@@ -70,6 +79,10 @@ export class Client {
 				resultBody.scope,
 				resultBody.expires_in
 			);
+			
+			if (callback) {
+				callback();
+			}
 		});
 	}
 
@@ -137,6 +150,45 @@ export class Client {
 		}
 		return tracks;
 	}
+
+	public async getAvailableDevices(): Promise<Device[]> {
+		this._refreshToken();
+		
+		const res = await fetch(`https://api.spotify.com/v1/me/player/devices`, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			}
+		});
+
+		if (res.status !== 200) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+
+		const result = await res.json() as {
+			devices: {
+				id: string,
+				name: string,
+				type: string,
+				is_restricted: boolean,
+			}[]
+
+		};
+
+		if (result.devices.length === 0) {
+			return [];
+		}
+
+		const devices: Device[] = [];
+		for (let item of result.devices) {
+			devices.push({
+				id: item.id,
+				label: item.name,
+				type: item.type,
+				isRestricted: item.is_restricted			
+			});
+		}
+		return devices;
+	} 
 
 	private async _getLikedTracks(): Promise<Track[]> {
 		const res = await fetch(`https://api.spotify.com/v1/me/tracks`, {
@@ -208,7 +260,7 @@ export class Client {
 	}
 
 	private _getAuthScopes(): string {
-		return 'user-read-private user-library-read';
+		return 'user-read-private user-library-read user-read-playback-state';
 	}
 
 }

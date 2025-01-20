@@ -30,6 +30,10 @@
       {
         "command": "vsc-spotify.login",
         "title": "Spotify: Login"
+      },
+      {
+        "command": "vsc-spotify.devices.select",
+        "title": "Spotify: Select playback device"
       }
     ],
     "menus": {
