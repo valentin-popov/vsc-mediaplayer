@@ -19,6 +19,13 @@ type Device = {
 	isRestricted: boolean;
 };
 
+type DeviceResponse = {
+	id: string,
+	name: string,
+	type: string,
+	is_restricted: boolean,
+};
+
 export class Client {
 	
 	private _clientId: string;
@@ -165,13 +172,7 @@ export class Client {
 		}
 
 		const result = await res.json() as {
-			devices: {
-				id: string,
-				name: string,
-				type: string,
-				is_restricted: boolean,
-			}[]
-
+			devices: DeviceResponse[]
 		};
 
 		if (result.devices.length === 0) {
@@ -190,11 +191,84 @@ export class Client {
 		return devices;
 	} 
 
-	private async _getLikedTracks(): Promise<Track[]> {
-		const res = await fetch(`https://api.spotify.com/v1/me/tracks`, {
+	public async isPlaying(): Promise<boolean> {
+		this._refreshToken();
+		
+		const res = await fetch(`https://api.spotify.com/v1/me/player`, {
 			headers: {
 				'Authorization': `Bearer ${this._token?._accessToken}`
 			}
+		});
+
+		if (res.status === 204) {
+			throw new Error(`Error: status ${res.status}`, {
+				cause: 'missing_player'
+			});
+		}
+
+		if (res.status !== 200) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+		const result = await res.json() as {
+			device:	DeviceResponse,
+			is_playing: boolean,
+		};
+
+		this.currentDeviceId = result.device.id;
+		return result.is_playing;
+	}
+
+	public async resumePlaying(): Promise<void> {
+		this._refreshToken();
+		
+		let url = 'https://api.spotify.com/v1/me/player/play';
+
+		if (this.currentDeviceId !== '') {
+			url = `${url}?${this.currentDeviceId}`;
+		}
+
+		const res = await fetch(url, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			},
+			method: 'PUT'
+		});
+
+		if (res.status !== 204) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+
+	}
+
+	public async pausePlaying(): Promise<void> {
+		this._refreshToken();
+		
+		let url = 'https://api.spotify.com/v1/me/player/pause';
+
+		if (this.currentDeviceId !== '') {
+			url = `${url}?device_id=${this.currentDeviceId}`;
+		}
+
+		const res = await fetch(url, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			},
+			method: 'PUT'
+		});
+
+		if (res.status !== 204) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+		
+	}
+
+	private async _getLikedTracks(): Promise<Track[]> {
+		this._refreshToken();
+		
+		const res = await fetch(`https://api.spotify.com/v1/me/tracks`, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			},
 		});
 
 		if (res.status !== 200) {
@@ -260,7 +334,7 @@ export class Client {
 	}
 
 	private _getAuthScopes(): string {
-		return 'user-read-private user-library-read user-read-playback-state';
+		return 'user-read-private user-library-read user-read-playback-state user-modify-playback-state';
 	}
 
 }

@@ -20,14 +20,15 @@ export function activate(context: vscode.ExtensionContext) {
 				server.redirectUri,
 				() => {
 					_loadPlaylists();
-					_selectPlaybackDevice();
+					// _selectPlaybackDevice();
+					_showPlaybar();
+
 				}
 			);
 		}
 	);
 
 	_initClient();
-	_showPlaybar();
 
 	context.subscriptions.push(vscode.commands.registerCommand('vsc-spotify.login', _initClient));
 	context.subscriptions.push(vscode.commands.registerCommand('vsc-spotify.devices.select', _selectPlaybackDevice));
@@ -38,39 +39,52 @@ export function deactivate() {
 	server.stop();
 }
 
-function _showPlaybar() {
+async function _showPlaybar() {
 
-	// toggle status for play/pause
-	let paused = true;
-	const playPauseIcon = [`$(debug-start)`, `$(debug-pause)`];
-	const playPauseTooltip = ['Play song', 'Pause song'];
-	let playPauseIndex = 0;
+	const playIcon = `$(debug-start)`, pauseIcon = `$(debug-pause)`;
+	const playTooltip  = 'Play song', pauseTooltip = 'Pause song';
 
 	const previous = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 3);
+	const play = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 2);
+	const next = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1);
+
 	previous.text = `$(chevron-left)`;
 	previous.command = 'previous';
-	previous.show();
 
-	const play = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 2);
-	play.text = playPauseIcon[playPauseIndex];
-	play.tooltip = playPauseTooltip[playPauseIndex];
-
-	play.command = 'playPause';
-
-	vscode.commands.registerCommand('playPause', () => {
-		paused = !paused;
-		playPauseIndex = 1 - playPauseIndex;
-		play.text = playPauseIcon[playPauseIndex];
-		play.tooltip = playPauseTooltip[playPauseIndex];
-
-	});
-	play.show();
-
-	const next = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1);
 	next.text = `$(chevron-right)`;
 	next.command = 'next';
-	next.show();
 
+	play.text = playIcon;
+	play.tooltip = playTooltip;
+	play.command = 'playPause';
+
+	if (await _isPlaying()) {
+		play.text = pauseIcon;
+		play.tooltip = pauseIcon;
+	}
+
+	play.show();
+	next.show();
+	previous.show();
+
+	vscode.commands.registerCommand('playPause', async () => {
+		if (client === null) {
+			throw new Error('Client not initialized');
+		}	
+
+		const isPlaying = await _isPlaying();
+
+		if (isPlaying) {
+			client.pausePlaying();
+			play.tooltip = playTooltip;
+			play.text = playIcon;
+		} else {
+			client.resumePlaying();
+			play.tooltip = pauseTooltip;
+			play.text = pauseIcon;
+		}
+
+	});
 }
 
 function _initClient(): void {
@@ -97,9 +111,10 @@ function _initClient(): void {
 }
 
 async function _loadPlaylists(): Promise<void> {
+	
 	if (client === null) {
 		throw new Error('Client not initialized');
-	}		
+	}
 	
 	vscode.window.createTreeView('playlists', {
 		treeDataProvider: new MediaItemProvider<Playlist>(await client.getPlaylists())
@@ -116,6 +131,14 @@ async function _loadPlaylists(): Promise<void> {
 
 		vscode.window.createTreeView('tracks', {
 			treeDataProvider: new MediaItemProvider<Track>(tracks)
+		}).onDidChangeSelection(async event => {
+			if (!event.selection.length) {
+				throw new Error('Invalid selection');
+			}
+			if (client === null) {
+				throw new Error('Client not initialized');
+			}
+			
 		});
 	});
 }
@@ -144,4 +167,21 @@ async function _selectPlaybackDevice() {
 		client.currentDeviceId = device.id;
 	});
 	
+}
+
+async function _isPlaying(): Promise<boolean> {
+	if (client === null) {
+		throw new Error('Client not initialized');
+	}
+
+	let isPlaying = false;
+	try {
+		isPlaying = await client.isPlaying();
+	} catch (exc) {
+		if (exc instanceof Error && exc.cause === 'missing_player') {
+			vscode.window.showErrorMessage('No open Spotify device');
+			return false;
+		}
+	}
+	return isPlaying;
 }
