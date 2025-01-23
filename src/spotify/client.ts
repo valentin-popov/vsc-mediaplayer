@@ -218,7 +218,7 @@ export class Client {
 		return result.is_playing;
 	}
 
-	public async resumePlaying(): Promise<void> {
+	public async resumePlaying(trackId?: string): Promise<void> {
 		this._refreshToken();
 		
 		let url = 'https://api.spotify.com/v1/me/player/play';
@@ -227,12 +227,19 @@ export class Client {
 			url = `${url}?${this.currentDeviceId}`;
 		}
 
-		const res = await fetch(url, {
+		const options: RequestInit = {
 			headers: {
 				'Authorization': `Bearer ${this._token?._accessToken}`
 			},
 			method: 'PUT'
-		});
+		};
+
+		if (trackId !== undefined) {
+			options.body = JSON.stringify({
+				'uris': [`spotify:track:${trackId}`]
+			});
+		}
+		const res = await fetch(url, options);
 
 		if (res.status !== 204) {
 			throw new Error(`Error: status ${res.status}`);
@@ -260,6 +267,28 @@ export class Client {
 			throw new Error(`Error: status ${res.status}`);
 		}
 		
+	}
+
+	public async getCurrentTrack(): Promise<string> {
+		this._refreshToken();
+		
+		const res = await fetch(`https://api.spotify.com/v1/me/player/currently-playing`, {
+			headers: {
+				'Authorization': `Bearer ${this._token?._accessToken}`
+			},
+		});
+
+		if (res.status !== 200) {
+			throw new Error(`Error: status ${res.status}`);
+		}
+		const result = await res.json() as {
+			item: {
+				name: string
+			}
+		};
+
+		return result.item.name;
+
 	}
 
 	private async _getLikedTracks(): Promise<Track[]> {

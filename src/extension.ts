@@ -6,6 +6,61 @@ import { MediaItemProvider, Playlist, Track } from './spotify/playlist';
 const server = new Server();
 let client: Client | null;
 
+const playBar: {
+	previous: vscode.StatusBarItem,
+	playPause: vscode.StatusBarItem,
+	next: vscode.StatusBarItem,
+	currentTrack: vscode.StatusBarItem,
+	init: (playing: boolean) => void,
+	show: () => void,
+	setPlaying: (playState?: boolean) => void,
+} = {
+	previous: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 4),
+	playPause: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 3),
+	next: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 2),
+	currentTrack: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1),
+	async init(playing: boolean) {
+	
+		this.previous.text = `$(chevron-left)`;
+		this.previous.command = 'previous';
+	
+		this.next.text = `$(chevron-right)`;
+		this.next.command = 'next';
+	
+		this.playPause.command = 'playPause';
+
+		if (playing) {
+			this.playPause.text = `$(debug-pause)`;
+			this.playPause.tooltip = 'Pause song';
+		} else {
+			this.playPause.text = `$(debug-start)`;
+			this.playPause.tooltip = 'Play song';
+		}
+
+		if (client !== null) {
+			this.currentTrack.text = await client.getCurrentTrack();
+		}
+
+	},
+	show() {
+		if (this !== undefined) {
+			this.previous.show();
+			this.playPause.show();
+			this.next.show();
+			this.currentTrack.show();
+		}
+	},
+	setPlaying(playState) {
+		if (playState) {
+			this.playPause.text = `$(debug-pause)`;
+			this.playPause.tooltip = 'Pause song';
+			return;
+		}
+			this.playPause.text = `$(debug-start)`;
+			this.playPause.tooltip = 'Play song';
+	},
+};
+
 export function activate(context: vscode.ExtensionContext) {
 
 	server.start(
@@ -41,48 +96,25 @@ export function deactivate() {
 
 async function _showPlaybar() {
 
-	const playIcon = `$(debug-start)`, pauseIcon = `$(debug-pause)`;
-	const playTooltip  = 'Play song', pauseTooltip = 'Pause song';
+	let isPlaying = await _isPlaying();
 
-	const previous = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 3);
-	const play = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 2);
-	const next = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1);
-
-	previous.text = `$(chevron-left)`;
-	previous.command = 'previous';
-
-	next.text = `$(chevron-right)`;
-	next.command = 'next';
-
-	play.text = playIcon;
-	play.tooltip = playTooltip;
-	play.command = 'playPause';
-
-	if (await _isPlaying()) {
-		play.text = pauseIcon;
-		play.tooltip = pauseIcon;
-	}
-
-	play.show();
-	next.show();
-	previous.show();
+	playBar.init(isPlaying);
+	playBar.show();
 
 	vscode.commands.registerCommand('playPause', async () => {
 		if (client === null) {
 			throw new Error('Client not initialized');
 		}	
 
-		const isPlaying = await _isPlaying();
+		isPlaying = await _isPlaying();
 
 		if (isPlaying) {
 			client.pausePlaying();
-			play.tooltip = playTooltip;
-			play.text = playIcon;
 		} else {
 			client.resumePlaying();
-			play.tooltip = pauseTooltip;
-			play.text = pauseIcon;
 		}
+
+		playBar.setPlaying(!isPlaying);
 
 	});
 }
@@ -139,6 +171,13 @@ async function _loadPlaylists(): Promise<void> {
 				throw new Error('Client not initialized');
 			}
 			
+			const isPlaying = await _isPlaying();
+			await client.resumePlaying(event.selection[0].id);
+			playBar.setPlaying(!isPlaying);
+
+			if (typeof event.selection[0].label === 'string') {
+				playBar.currentTrack.text = event.selection[0].label;
+			}
 		});
 	});
 }
