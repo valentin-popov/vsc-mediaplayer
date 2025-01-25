@@ -13,7 +13,7 @@ const playBar: {
 	currentTrack: vscode.StatusBarItem,
 	init: (playing: boolean) => void,
 	show: () => void,
-	setPlaying: (playState?: boolean) => void,
+	setPlaying: (playState: boolean) => void,
 } = {
 	previous: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 4),
 	playPause: vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 3),
@@ -38,6 +38,7 @@ const playBar: {
 		}
 
 		if (client !== null) {
+			// todo: update global currentTrack
 			this.currentTrack.text = await client.getCurrentTrack();
 		}
 
@@ -60,6 +61,9 @@ const playBar: {
 			this.playPause.tooltip = 'Play song';
 	},
 };
+
+let currentTrack: Track;
+let currentPlaylist: Playlist;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -117,6 +121,61 @@ async function _showPlaybar() {
 		playBar.setPlaying(!isPlaying);
 
 	});
+
+	vscode.commands.registerCommand('next', async () => {
+		if (client === null) {
+			throw new Error('Client not initialized');
+		}
+		
+		if (currentTrack === undefined) {
+			throw new Error('No track playing');
+		}
+		if (currentTrack.nextTrackId === undefined) {
+			return;
+		}
+
+		client.resumePlaying(currentTrack.nextTrackId);
+		playBar.setPlaying(true);
+		const nextTrack = currentPlaylist.getTrackById(currentTrack.nextTrackId)
+		if (nextTrack === null) {
+			return;
+		}
+		currentTrack = nextTrack;
+		if (typeof currentTrack.label === 'string') {
+			playBar.currentTrack.text = currentTrack.label;
+		}
+
+	});
+
+	vscode.commands.registerCommand('previous', async () => {
+		if (client === null) {
+			throw new Error('Client not initialized');
+		}
+		
+		if (currentTrack === undefined) {
+			throw new Error('No track playing');
+		}
+		if (currentTrack.previousTrackId === undefined) {
+			return;
+		}
+		
+		let trackId = await client.getPlayingPosition() < 3000 ?
+			currentTrack.previousTrackId : currentTrack.id;
+
+		client.resumePlaying(trackId);
+
+		playBar.setPlaying(true);
+		const prevTrack = currentPlaylist.getTrackById(currentTrack.previousTrackId);
+		if (prevTrack === null) {
+			return;
+		}
+		currentTrack = prevTrack;
+		if (typeof currentTrack.label === 'string') {
+			playBar.currentTrack.text = currentTrack.label;
+		}
+
+	});
+
 }
 
 function _initClient(): void {
@@ -159,7 +218,11 @@ async function _loadPlaylists(): Promise<void> {
 			throw new Error('Client not initialized');
 		}
 
+		// todo: first 20 items must be retrieved from the playlist read response,
+		// the rest of the playlist should be populated now
+
 		const tracks = await client.getTracks(event.selection[0].id);
+		currentPlaylist = event.selection[0];
 
 		vscode.window.createTreeView('tracks', {
 			treeDataProvider: new MediaItemProvider<Track>(tracks)
@@ -173,12 +236,20 @@ async function _loadPlaylists(): Promise<void> {
 			
 			const isPlaying = await _isPlaying();
 			await client.resumePlaying(event.selection[0].id);
-			playBar.setPlaying(!isPlaying);
+			if (!isPlaying) {
+				playBar.setPlaying(true);
+			}
 
+			currentTrack = event.selection[0];
 			if (typeof event.selection[0].label === 'string') {
 				playBar.currentTrack.text = event.selection[0].label;
 			}
 		});
+
+		tracks.forEach((track) => {
+			currentPlaylist.addTrack(track);
+		});
+
 	});
 }
 

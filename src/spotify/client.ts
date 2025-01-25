@@ -4,12 +4,14 @@ import { Playlist, Track } from './playlist';
 
 type TrackResponse = {
 	items: {
-		track: {
-			id: string,
-			name: string,
-			is_playable: boolean
-		},
+		track: TrackItem
 	}[]
+};
+
+type TrackItem = {
+	id: string,
+	name: string,
+	is_playable: boolean
 };
 
 type Device = {
@@ -24,6 +26,13 @@ type DeviceResponse = {
 	name: string,
 	type: string,
 	is_restricted: boolean,
+};
+
+type CurrentlyPlayingItem = {
+	item: {
+		name: string
+	},
+	progress_ms: number | null
 };
 
 export class Client {
@@ -152,9 +161,24 @@ export class Client {
 		}
 
 		const tracks: Track[] = [];
-		for (let item of result.items) {
-			tracks.push(new Track(item.track.id, item.track.name, item.track.is_playable));
+		for (let i = 0; i < result.items.length; i++) {
+			const track = new Track(
+				result.items[i].track.id,
+				result.items[i].track.name, 
+				result.items[i].track.is_playable,
+			);
+
+			if (i < result.items.length - 1) {
+				track.nextTrackId = result.items[i + 1].track.id;
+			}
+
+			if (i > 0) {
+				track.previousTrackId = result.items[i - 1].track.id;
+			}
+
+			tracks.push(track);
 		}
+
 		return tracks;
 	}
 
@@ -218,7 +242,7 @@ export class Client {
 		return result.is_playing;
 	}
 
-	public async resumePlaying(trackId?: string): Promise<void> {
+	public async resumePlaying(trackId?: string, playlistId?: string): Promise<void> {
 		this._refreshToken();
 		
 		let url = 'https://api.spotify.com/v1/me/player/play';
@@ -234,14 +258,26 @@ export class Client {
 			method: 'PUT'
 		};
 
+		let body: {
+			uris?: string[],
+			context_uri?: string
+		} = {};
+
 		if (trackId !== undefined) {
-			options.body = JSON.stringify({
-				'uris': [`spotify:track:${trackId}`]
-			});
+			body.uris = [`spotify:track:${trackId}`];
 		}
+
+		if (playlistId !== undefined) {
+			body.context_uri = `spotify:playlist:${playlistId}`;
+		}
+		
+		if (body.uris || body.context_uri) {
+			options.body = JSON.stringify(body);
+		}
+
 		const res = await fetch(url, options);
 
-		if (res.status !== 204) {
+		if (res.status > 204) {
 			throw new Error(`Error: status ${res.status}`);
 		}
 
@@ -263,13 +299,25 @@ export class Client {
 			method: 'PUT'
 		});
 
-		if (res.status !== 204) {
+		if (res.status > 204) {
 			throw new Error(`Error: status ${res.status}`);
 		}
 		
 	}
 
 	public async getCurrentTrack(): Promise<string> {
+
+		// todo: return item
+		const result = await this._getCurrentlyPlaying();
+		return result.item.name;
+	}
+
+	public async getPlayingPosition(): Promise<number> {
+		const currentItem = this._getCurrentlyPlaying();
+		return (await currentItem).progress_ms ?? 0;
+	}
+
+	private async _getCurrentlyPlaying(): Promise<CurrentlyPlayingItem> {
 		this._refreshToken();
 		
 		const res = await fetch(`https://api.spotify.com/v1/me/player/currently-playing`, {
@@ -281,14 +329,7 @@ export class Client {
 		if (res.status !== 200) {
 			throw new Error(`Error: status ${res.status}`);
 		}
-		const result = await res.json() as {
-			item: {
-				name: string
-			}
-		};
-
-		return result.item.name;
-
+		return await res.json() as CurrentlyPlayingItem;
 	}
 
 	private async _getLikedTracks(): Promise<Track[]> {
@@ -310,9 +351,24 @@ export class Client {
 		}
 
 		const tracks: Track[] = [];
-		for (let item of result.items) {
-			tracks.push(new Track(item.track.id, item.track.name, item.track.is_playable));
+		for (let i = 0; i < result.items.length; i++) {
+			const track = new Track(
+				result.items[i].track.id,
+				result.items[i].track.name, 
+				result.items[i].track.is_playable,
+			);
+
+			if (i < result.items.length - 1) {
+				track.nextTrackId = result.items[i + 1].track.id;
+			}
+
+			if (i > 0) {
+				track.previousTrackId = result.items[i - 1].track.id;
+			}
+
+			tracks.push(track);
 		}
+
 		return tracks;
 
 	}

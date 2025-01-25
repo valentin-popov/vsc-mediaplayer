@@ -29,11 +29,39 @@ export class Playlist extends vscode.TreeItem {
 		this.id = id;
 	}
 
+	private _list: Record<string, Track> | null = null;
+
+	public get list(): Record<string, Track> {
+		if (this._list === null) {
+			return {
+				'': new Track('', '', false)
+			};
+		}
+		return this._list;
+	}
+
+	public getTrackById(id: string): Track | null {
+		if (this._list === null) {
+			return null;
+		}
+		return this._list[id];
+	}
+
+	public addTrack(track: Track) {
+		if (this._list === null) {
+			this._list = {
+				[track.id]: track
+			};
+		}
+		this._list[track.id] = track; 
+	}
 }
 
 export class Track extends vscode.TreeItem {
 	id: string;
 	isPlayable: boolean;
+	nextTrackId?: string;
+	previousTrackId?:string;
 	
 	constructor(
 		id: string,
