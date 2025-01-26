@@ -159,10 +159,13 @@ async function _showPlaybar() {
 			return;
 		}
 		
-		let trackId = await client.getPlayingPosition() < 3000 ?
-			currentTrack.previousTrackId : currentTrack.id;
+		if (await client.getPlayingPosition() > 3000) {
+			client.resumePlaying(currentTrack.id);
+			playBar.setPlaying(true);
+			return;
+		}
 
-		client.resumePlaying(trackId);
+		client.resumePlaying(currentTrack.previousTrackId);
 
 		playBar.setPlaying(true);
 		const prevTrack = currentPlaylist.getTrackById(currentTrack.previousTrackId);
