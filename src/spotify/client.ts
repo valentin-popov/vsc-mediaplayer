@@ -5,7 +5,8 @@ import { Playlist, Track } from './playlist';
 type TrackResponse = {
 	items: {
 		track: TrackItem
-	}[]
+	}[],
+	next: string | null
 };
 
 type TrackItem = {
@@ -106,34 +107,44 @@ export class Client {
 
 		this._refreshToken();
 	
-		const res = await fetch('https://api.spotify.com/v1/me/playlists', {
-			headers: {
-				'Authorization': `Bearer ${this._token?._accessToken}`
-			}
-		});
-
-		if (res.status !== 200) {
-			throw new Error(`Error: status ${res.status}`);
-		}
-
-		const result = await res.json() as {
-			items: {
-				name: string,
-				id: string
-			}[]
-		};
+		let fetchUrl: string | null = 'https://api.spotify.com/v1/me/playlists?limit=50';
 	
-		if (result.items.length === 0) {
-			return [];
-		}
-
 		const playlists: Playlist[] = [
 			new Playlist('liked', 'Liked Songs')
 		];
 
-		for (let item of result.items) {
-			playlists.push(new Playlist(item.id, item.name));
+		while(true) {
+
+			const res = await fetch(fetchUrl, {
+				headers: {
+					'Authorization': `Bearer ${this._token?._accessToken}`
+				}
+			});
+
+			if (res.status !== 200) {
+				throw new Error(`Error: status ${res.status}`);
+			}
+
+			const result = await res.json() as {
+				items: {
+					name: string,
+					id: string
+				}[],
+				next: string
+			};
+
+			result.items.forEach(item => {
+				playlists.push(new Playlist(item.id, item.name));
+			});
+
+			if (result.next === null) {
+				break;
+			}
+
+			fetchUrl = `${result.next}&limit=50`;
+
 		}
+
 		return playlists;
 
 	}
@@ -141,45 +152,67 @@ export class Client {
 	public async getTracks(playlistId: string): Promise<Track[]> {
 		this._refreshToken();
 
-		if (playlistId === 'liked') {
-			return this._getLikedTracks();
-		}
-
-		const res = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-			headers: {
-				'Authorization': `Bearer ${this._token?._accessToken}`
-			}
-		});
-
-		if (res.status !== 200) {
-			throw new Error(`Error: status ${res.status}`);
-		}
-
-		const result = await res.json() as TrackResponse;
-		if (result.items.length === 0) {
-			return [];
-		}
-
 		const tracks: Track[] = [];
-		for (let i = 0; i < result.items.length; i++) {
+
+		const res = await this._fetchTracks(playlistId);
+		for (let i = 0; i < res.length; i++) {
+		
 			const track = new Track(
-				result.items[i].track.id,
-				result.items[i].track.name, 
-				result.items[i].track.is_playable,
+				res[i].track.id,
+				res[i].track.name, 
+				res[i].track.is_playable,
 			);
-
-			if (i < result.items.length - 1) {
-				track.nextTrackId = result.items[i + 1].track.id;
+	
+			if (i < res.length - 1) {
+				track.nextTrackId = res[i + 1].track.id;
 			}
-
+	
 			if (i > 0) {
-				track.previousTrackId = result.items[i - 1].track.id;
+				track.previousTrackId = res[i - 1].track.id;
 			}
-
+	
 			tracks.push(track);
+
 		}
 
 		return tracks;
+	}
+
+	private async _fetchTracks(playlistId: string): Promise<{track: TrackItem}[]> {
+
+		let fetchUrl: string | null = playlistId === 'liked' ?
+			'https://api.spotify.com/v1/me/tracks?limit=50': 
+			`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50`;
+		
+		let tracks: {
+			track: TrackItem
+		}[] = [];
+
+		while(true) {
+
+			const res = await fetch(fetchUrl, {
+				headers: {
+					'Authorization': `Bearer ${this._token?._accessToken}`
+				}
+			});
+	
+			if (res.status !== 200) {
+				throw new Error(`Error: status ${res.status}`);
+			}
+	
+			const result = await res.json() as TrackResponse;
+
+			tracks.push(...result.items);
+			if (result.next === null) {
+				break;
+			}
+
+			fetchUrl = `${result.next}&limit=50`;
+
+		}
+
+		return tracks;
+
 	}
 
 	public async getAvailableDevices(): Promise<Device[]> {
@@ -330,47 +363,6 @@ export class Client {
 			throw new Error(`Error: status ${res.status}`);
 		}
 		return await res.json() as CurrentlyPlayingItem;
-	}
-
-	private async _getLikedTracks(): Promise<Track[]> {
-		this._refreshToken();
-		
-		const res = await fetch(`https://api.spotify.com/v1/me/tracks`, {
-			headers: {
-				'Authorization': `Bearer ${this._token?._accessToken}`
-			},
-		});
-
-		if (res.status !== 200) {
-			throw new Error(`Error: status ${res.status}`);
-		}
-		const result = await res.json() as TrackResponse;
-		
-		if (result.items.length === 0) {
-			return [];
-		}
-
-		const tracks: Track[] = [];
-		for (let i = 0; i < result.items.length; i++) {
-			const track = new Track(
-				result.items[i].track.id,
-				result.items[i].track.name, 
-				result.items[i].track.is_playable,
-			);
-
-			if (i < result.items.length - 1) {
-				track.nextTrackId = result.items[i + 1].track.id;
-			}
-
-			if (i > 0) {
-				track.previousTrackId = result.items[i - 1].track.id;
-			}
-
-			tracks.push(track);
-		}
-
-		return tracks;
-
 	}
 
 	private _refreshToken() {
